@@ -1,0 +1,75 @@
+{% extends 'base.twig' %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">Watchdog Diagnostics</h3>
+    <p class="text-muted mb-0">Run watchdog-style checks manually and inspect the result of each probe.</p>
+  </div>
+  <div class="btn-group ms-auto">
+    <button class="btn btn-sm btn-primary" id="watchdog-run-selected"><i class="bi bi-play-fill"></i> Run selected</button>
+    <button class="btn btn-sm btn-secondary" id="watchdog-select-all">Select all</button>
+    <button class="btn btn-sm btn-secondary" id="watchdog-clear-results">Clear</button>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-lg-4 mb-4">
+    <div class="card">
+      <div class="card-header fs-5">Checks</div>
+      <div class="list-group list-group-flush" id="watchdog-check-list">
+        {% for check in watchdog_checks %}
+          <label class="list-group-item">
+            <div class="d-flex gap-2">
+              <input class="form-check-input watchdog-check" type="checkbox" value="{{ check.id }}" checked>
+              <div>
+                <span class="fw-bold">{{ check.name }}</span>
+                <small class="d-block text-muted">{{ check.service }}</small>
+                <small class="d-block">{{ check.description }}</small>
+              </div>
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center fs-5">
+        <span>Live Results</span>
+        <span class="badge bg-secondary ms-auto" id="watchdog-run-state">Idle</span>
+      </div>
+      <div class="card-body">
+        <div id="watchdog-results" class="d-flex flex-column gap-3">
+          <div class="text-muted" id="watchdog-empty-state">No checks have been run yet.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-4">
+      <div class="card-header d-flex align-items-center fs-5">
+        <span>Recent Watchdog Events</span>
+        <button class="btn btn-sm btn-secondary ms-auto" id="watchdog-refresh-events"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-striped mb-0">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Service</th>
+                <th>Trend</th>
+                <th>Message</th>
+              </tr>
+            </thead>
+            <tbody id="watchdog-events">
+              <tr><td colspan="4" class="text-muted">Loading events...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
