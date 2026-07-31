@@ -349,19 +349,25 @@ function system_check_mysql_check() {
 function system_check_postfix_check() {
   list($ok, $message) = system_check_tcp_command('postfix', 589, array(
     'EHLO system-check.local',
-    'MAIL FROM:<system-check@invalid>',
-    'RCPT TO:<system-check@localhost>'
-  ), '250 2.1.5', 10, true);
+    'MAIL FROM:<>'
+  ), '250 2.1.0', 10, true);
   system_check_response('Postfix SMTP check', $ok ? 'ok' : 'error', $ok ? 'Postfix SMTP listener responded.' : 'Postfix SMTP listener check failed.', array(
     system_check_step($ok ? 'ok' : 'error', 'SMTP dialog', $message)
-  ), $ok ? '' : 'Check postfix-mailcow logs and whether the internal listener on port 589 is accepting mail from the mailcow network. A timeout or empty response can indicate Postfix is overloaded or blocked.');
+  ), $ok ? '' : 'Check postfix-mailcow logs and whether the internal listener on port 589 is accepting mail from the mailcow network. A timeout, empty response, or MAIL FROM rejection can indicate Postfix is overloaded, blocked, or misconfigured.');
 }
 
 function system_check_dovecot_check() {
+  $hostname = getenv('MAILCOW_HOSTNAME');
+  if (empty($hostname)) {
+    system_check_response('Dovecot listener check', 'error', 'MAILCOW_HOSTNAME is not configured.', array(
+      system_check_step('error', 'MAILCOW_HOSTNAME', 'not set')
+    ), 'Set MAILCOW_HOSTNAME in mailcow.conf. Public listener checks need the configured hostname.');
+  }
+
   $steps = array();
-  list($imap_ok, $imap_message) = system_check_tcp_command('dovecot', 143, array(), 'OK', 7);
+  list($imap_ok, $imap_message) = system_check_tcp_command($hostname, 143, array(), 'OK', 7);
   $steps[] = system_check_step($imap_ok ? 'ok' : 'error', 'IMAP 143', $imap_message);
-  list($sieve_ok, $sieve_message) = system_check_tcp_command('dovecot', 4190, array(), 'Dovecot ready', 7);
+  list($sieve_ok, $sieve_message) = system_check_tcp_command($hostname, 4190, array(), 'Dovecot ready', 7);
   $steps[] = system_check_step($sieve_ok ? 'ok' : 'warning', 'ManageSieve 4190', $sieve_message);
   $ok = $imap_ok && $sieve_ok;
   system_check_response('Dovecot listener check', $ok ? 'ok' : 'error', $ok ? 'Dovecot listeners responded.' : 'One or more Dovecot listeners did not respond.', $steps, $ok ? '' : 'Check dovecot-mailcow logs and internal listener bindings. IMAP failure affects mailbox access; ManageSieve failure affects filter management.');
