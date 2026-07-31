@@ -66,46 +66,6 @@ $(document).ready(function() {
     }).get();
   }
 
-  function formatTime(value) {
-    if (!value) return "-";
-    var date = new Date(Date.parse(value));
-    if (date instanceof Date && !isNaN(date)) {
-      return date.toLocaleString();
-    }
-    return value;
-  }
-
-  function renderEvents(rows) {
-    if (!rows.length) {
-      $("#system-check-events").html('<tr><td colspan="4" class="text-muted">No monitor events found.</td></tr>');
-      return;
-    }
-
-    $("#system-check-events").html(rows.map(function(row) {
-      return '<tr>' +
-        '<td>' + escapeHtml(formatTime(row.time)) + '</td>' +
-        '<td>' + escapeHtml(row.service || "") + '</td>' +
-        '<td>' + escapeHtml(row.trend || "") + '</td>' +
-        '<td class="text-break">' + escapeHtml(row.message || "") + '</td>' +
-      '</tr>';
-    }).join(""));
-  }
-
-  function refreshEvents() {
-    $("#system-check-events").html('<tr><td colspan="4" class="text-muted">Loading events...</td></tr>');
-    window.fetch("/api/v1/get/logs/watchdog/100", {
-      method: "GET",
-      cache: "no-cache"
-    }).then(function(response) {
-      return response.json();
-    }).then(function(data) {
-      renderEvents(Array.isArray(data) ? data : []);
-    }).catch(function(error) {
-      console.log(error);
-      $("#system-check-events").html('<tr><td colspan="4" class="text-warning">Could not load monitor events.</td></tr>');
-    });
-  }
-
   function checkName(check) {
     return $('.system-check[value="' + check + '"]').closest("label").find(".fw-bold").first().text();
   }
@@ -165,10 +125,4 @@ $(document).ready(function() {
     $("#system-check-run-state").removeClass("bg-success bg-danger bg-info text-dark").addClass("bg-secondary").text("Idle");
   });
 
-  $("#system-check-refresh-events").on("click", function(e) {
-    e.preventDefault();
-    refreshEvents();
-  });
-
-  refreshEvents();
 });

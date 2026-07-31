@@ -149,6 +149,169 @@ function system_check_nginx_check() {
   ), $ok ? '' : 'Check nginx-mailcow configuration, generated templates, and upstream php-fpm connectivity.');
 }
 
+function system_check_resolver_check() {
+  $targets = array(
+    'Internal nginx service' => 'nginx',
+    'Internal postfix service' => 'postfix',
+    'Public mailcow check service' => 'checks.mailcow.email'
+  );
+  $steps = array();
+  $has_error = false;
+
+  foreach ($targets as $label => $host) {
+    $records = dns_get_record($host, DNS_A + DNS_AAAA);
+    $ok = is_array($records) && count($records) > 0;
+    if (!$ok) {
+      $has_error = true;
+    }
+    $values = array();
+    if ($ok) {
+      foreach ($records as $record) {
+        if (isset($record['ip'])) {
+          $values[] = $record['ip'];
+        }
+        if (isset($record['ipv6'])) {
+          $values[] = $record['ipv6'];
+        }
+      }
+    }
+    system_check_sort_unique($values);
+    $steps[] = system_check_step($ok ? 'ok' : 'error', $label, $ok ? implode(', ', $values) : 'No A/AAAA records returned.');
+  }
+
+  system_check_response('Resolver check', $has_error ? 'error' : 'ok', $has_error ? 'One or more DNS lookups failed.' : 'DNS resolution is working for internal and public names.', $steps, $has_error ? 'Check unbound-mailcow, Docker DNS, and upstream resolver connectivity. DNS failures can break ACME, updates, outbound delivery, and external reputation checks.' : '');
+}
+
+function system_check_sort_unique(&$values) {
+  $values = array_values(array_unique(array_filter($values)));
+  sort($values);
+}
+
+function system_check_hostname_dns_check() {
+  $hostname = getenv('MAILCOW_HOSTNAME');
+  if (empty($hostname)) {
+    system_check_response('Hostname DNS check', 'error', 'MAILCOW_HOSTNAME is not configured.', array(
+      system_check_step('error', 'MAILCOW_HOSTNAME', 'not set')
+    ), 'Set MAILCOW_HOSTNAME in mailcow.conf.');
+  }
+
+  $steps = array();
+  $has_warning = false;
+  $a_records = array();
+  foreach (dns_get_record($hostname, DNS_A) ?: array() as $record) {
+    if (isset($record['ip'])) {
+      $a_records[] = $record['ip'];
+    }
+  }
+  system_check_sort_unique($a_records);
+  if (empty($a_records)) {
+    $has_warning = true;
+  }
+  $steps[] = system_check_step(empty($a_records) ? 'warning' : 'ok', 'A records', empty($a_records) ? 'No A records found.' : implode(', ', $a_records));
+
+  $aaaa_records = array();
+  foreach (dns_get_record($hostname, DNS_AAAA) ?: array() as $record) {
+    if (isset($record['ipv6'])) {
+      $aaaa_records[] = $record['ipv6'];
+    }
+  }
+  system_check_sort_unique($aaaa_records);
+  $steps[] = system_check_step('ok', 'AAAA records', empty($aaaa_records) ? 'No AAAA records found.' : implode(', ', $aaaa_records));
+
+  $mx_records = dns_get_record($hostname, DNS_MX) ?: array();
+  $mx_values = array();
+  foreach ($mx_records as $record) {
+    if (isset($record['target'])) {
+      $mx_values[] = $record['target'];
+    }
+  }
+  system_check_sort_unique($mx_values);
+  $steps[] = system_check_step(empty($mx_values) ? 'warning' : 'ok', 'MX records', empty($mx_values) ? 'No MX records found for hostname.' : implode(', ', $mx_values));
+
+  system_check_response('Hostname DNS check', $has_warning ? 'warning' : 'ok', $has_warning ? 'Hostname DNS records need attention.' : 'Hostname DNS records resolve.', $steps, $has_warning ? 'Ensure MAILCOW_HOSTNAME resolves publicly to this mailcow instance. Missing A records can break web, ACME, and autodiscovery.' : '');
+}
+
+function system_check_domain_dns_check() {
+  $domains = mailbox('get', 'domains');
+  if (!is_array($domains) || empty($domains)) {
+    system_check_response('Mail domain DNS check', 'warning', 'No configured mail domains were found.', array(
+      system_check_step('warning', 'Domains', 'No active domains returned.')
+    ), 'Add mail domains before running domain DNS and deliverability checks.');
+  }
+
+  $steps = array();
+  $checked = 0;
+  $warnings = 0;
+  foreach ($domains as $domain) {
+    if ($checked >= 50) {
+      $steps[] = system_check_step('warning', 'Domain limit', 'Only the first 50 domains were checked.');
+      $warnings++;
+      break;
+    }
+
+    $mx_records = dns_get_record($domain, DNS_MX) ?: array();
+    $txt_records = dns_get_record($domain, DNS_TXT) ?: array();
+    $dmarc_records = dns_get_record('_dmarc.' . $domain, DNS_TXT) ?: array();
+    $has_mx = count($mx_records) > 0;
+    $has_spf = false;
+    foreach ($txt_records as $record) {
+      if (isset($record['txt']) && stripos($record['txt'], 'v=spf1') === 0) {
+        $has_spf = true;
+        break;
+      }
+    }
+    $has_dmarc = false;
+    foreach ($dmarc_records as $record) {
+      if (isset($record['txt']) && stripos($record['txt'], 'v=DMARC1') === 0) {
+        $has_dmarc = true;
+        break;
+      }
+    }
+
+    $missing = array();
+    if (!$has_mx) $missing[] = 'MX';
+    if (!$has_spf) $missing[] = 'SPF';
+    if (!$has_dmarc) $missing[] = 'DMARC';
+    if (!empty($missing)) {
+      $warnings++;
+    }
+    $steps[] = system_check_step(empty($missing) ? 'ok' : 'warning', $domain, empty($missing) ? 'MX, SPF, and DMARC are present.' : 'Missing: ' . implode(', ', $missing));
+    $checked++;
+  }
+
+  system_check_response('Mail domain DNS check', $warnings > 0 ? 'warning' : 'ok', $warnings > 0 ? 'Some domain DNS records need attention.' : 'Checked domains have basic deliverability DNS records.', $steps, $warnings > 0 ? 'Review DNS for the listed domains. MX affects inbound delivery; SPF and DMARC affect outbound deliverability and spoofing protection.' : '');
+}
+
+function system_check_outbound_check() {
+  $targets = array(
+    'mailcow checks HTTPS' => 'https://checks.mailcow.email',
+    'GitHub HTTPS' => 'https://api.github.com'
+  );
+  $steps = array();
+  $has_error = false;
+  foreach ($targets as $label => $url) {
+    $curl = curl_init($url);
+    curl_setopt_array($curl, array(
+      CURLOPT_CONNECTTIMEOUT => 5,
+      CURLOPT_TIMEOUT => 10,
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_NOBODY => true,
+      CURLOPT_USERAGENT => 'mailcow-system-check'
+    ));
+    curl_exec($curl);
+    $error = curl_error($curl);
+    $code = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+    curl_close($curl);
+    $ok = empty($error) && $code >= 200 && $code < 500;
+    if (!$ok) {
+      $has_error = true;
+    }
+    $steps[] = system_check_step($ok ? 'ok' : 'error', $label, $ok ? 'HTTP ' . $code : ($error ?: 'HTTP ' . $code));
+  }
+
+  system_check_response('Outbound connectivity check', $has_error ? 'error' : 'ok', $has_error ? 'One or more outbound HTTPS checks failed.' : 'Outbound HTTPS connectivity is available.', $steps, $has_error ? 'Check outbound firewall rules, DNS resolution, proxy settings, and IPv4/IPv6 routing from the mailcow network.' : '');
+}
+
 function system_check_redis_check() {
   global $redis;
 
@@ -338,6 +501,53 @@ function system_check_container_check() {
   system_check_response('Container state summary', $has_error ? 'error' : 'ok', $has_error ? 'At least one mailcow container is not running.' : 'All reported mailcow containers are running.', $steps, $has_error ? 'Inspect the stopped container logs and restart through docker compose after fixing the underlying error.' : '');
 }
 
+function system_check_storage_check() {
+  $exec_fields = array('cmd' => 'system', 'task' => 'df', 'dir' => '/var/vmail');
+  $response = docker('post', 'dovecot-mailcow', 'exec', $exec_fields);
+  $fields = explode(',', (string)json_decode($response, true));
+  if (count($fields) < 5) {
+    system_check_response('Mail storage check', 'error', 'Could not read /var/vmail disk usage.', array(
+      system_check_step('error', 'df /var/vmail', 'Unexpected Docker API response.')
+    ), 'Check dockerapi-mailcow and dovecot-mailcow access to /var/vmail.');
+  }
+
+  $usage_percent = (int)str_replace('%', '', $fields[4]);
+  $status = 'ok';
+  if ($usage_percent >= 90) {
+    $status = 'error';
+  }
+  elseif ($usage_percent >= 80) {
+    $status = 'warning';
+  }
+  $steps = array(
+    system_check_step($status, $fields[0], $fields[2] . ' used of ' . $fields[1] . ' (' . $fields[4] . ')')
+  );
+  system_check_response('Mail storage check', $status, $status == 'ok' ? 'Mail storage has available capacity.' : 'Mail storage usage is high.', $steps, $status == 'ok' ? '' : 'Free disk space or expand the volume before Dovecot/Postfix begin failing writes.');
+}
+
+function system_check_queue_check() {
+  $queue_json = mailq('get');
+  $queue = json_decode($queue_json, true);
+  if (!is_array($queue)) {
+    system_check_response('Mail queue check', 'error', 'Could not read Postfix queue.', array(
+      system_check_step('error', 'postqueue', 'Unexpected queue response.')
+    ), 'Check postfix-mailcow and dockerapi-mailcow. Use the queue manager for message-level inspection.');
+  }
+
+  $count = count($queue);
+  $status = 'ok';
+  if ($count >= 1000) {
+    $status = 'error';
+  }
+  elseif ($count >= 100) {
+    $status = 'warning';
+  }
+  $steps = array(
+    system_check_step($status, 'Queued messages', (string)$count)
+  );
+  system_check_response('Mail queue check', $status, $status == 'ok' ? 'Postfix queue size is low.' : 'Postfix queue size is elevated.', $steps, $status == 'ok' ? '' : 'Use the Queue Manager to inspect deferred reasons. Common causes include DNS failures, outbound blocks, remote throttling, and TLS policy issues.');
+}
+
 $check = isset($_GET['check']) ? $_GET['check'] : '';
 
 switch ($check) {
@@ -346,6 +556,18 @@ switch ($check) {
     break;
   case 'nginx':
     system_check_nginx_check();
+    break;
+  case 'resolver':
+    system_check_resolver_check();
+    break;
+  case 'hostname_dns':
+    system_check_hostname_dns_check();
+    break;
+  case 'domain_dns':
+    system_check_domain_dns_check();
+    break;
+  case 'outbound':
+    system_check_outbound_check();
     break;
   case 'redis':
     system_check_redis_check();
@@ -370,6 +592,12 @@ switch ($check) {
     break;
   case 'containers':
     system_check_container_check();
+    break;
+  case 'storage':
+    system_check_storage_check();
+    break;
+  case 'queue':
+    system_check_queue_check();
     break;
   default:
     http_response_code(400);

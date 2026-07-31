@@ -25,6 +25,30 @@ $template_data = [
       'description' => 'Checks that the internal nginx endpoint serving mailcow UI responds.'
     ],
     [
+      'id' => 'resolver',
+      'name' => 'Resolver check',
+      'category' => 'DNS',
+      'description' => 'Checks whether the UI container can resolve internal services and public DNS names.'
+    ],
+    [
+      'id' => 'hostname_dns',
+      'name' => 'Hostname DNS check',
+      'category' => 'DNS',
+      'description' => 'Checks A/AAAA and MX records for the configured mailcow hostname.'
+    ],
+    [
+      'id' => 'domain_dns',
+      'name' => 'Mail domain DNS check',
+      'category' => 'Deliverability',
+      'description' => 'Checks MX, SPF, and DMARC presence for configured mail domains.'
+    ],
+    [
+      'id' => 'outbound',
+      'name' => 'Outbound connectivity check',
+      'category' => 'Network',
+      'description' => 'Checks low-risk outbound HTTPS reachability from the UI container.'
+    ],
+    [
       'id' => 'redis',
       'name' => 'Redis ping',
       'category' => 'Core services',
@@ -71,6 +95,18 @@ $template_data = [
       'name' => 'Container state summary',
       'category' => 'Core services',
       'description' => 'Checks whether mailcow containers are running according to Docker.'
+    ],
+    [
+      'id' => 'storage',
+      'name' => 'Mail storage check',
+      'category' => 'Storage',
+      'description' => 'Checks /var/vmail disk usage as seen by the Dovecot container.'
+    ],
+    [
+      'id' => 'queue',
+      'name' => 'Mail queue check',
+      'category' => 'Mail flow',
+      'description' => 'Checks the current Postfix queue size without exposing queued message content.'
     ]
   ]
 ];
