@@ -40,6 +40,7 @@ $(document).ready(function() {
         '</div>' +
         '<div class="card-body">' +
           '<p class="mb-2 text-break">' + escapeHtml(data.summary || "") + '</p>' +
+          (data.guidance ? '<div class="alert alert-info py-2">' + escapeHtml(data.guidance) + '</div>' : '') +
           '<ul class="list-unstyled mb-0">' + stepHtml + '</ul>' +
         '</div>' +
       '</div>'
@@ -47,9 +48,9 @@ $(document).ready(function() {
   }
 
   function renderRunning(id, name) {
-    $("#watchdog-empty-state").addClass("d-none");
+    $("#system-check-empty-state").addClass("d-none");
     if (!$("#" + id).length) {
-      $("#watchdog-results").prepend('<div id="' + id + '"></div>');
+      $("#system-check-results").prepend('<div id="' + id + '"></div>');
     }
     renderResult(id, {
       name: name,
@@ -60,7 +61,7 @@ $(document).ready(function() {
   }
 
   function selectedChecks() {
-    return $(".watchdog-check:checked").map(function() {
+    return $(".system-check:checked").map(function() {
       return $(this).val();
     }).get();
   }
@@ -76,11 +77,11 @@ $(document).ready(function() {
 
   function renderEvents(rows) {
     if (!rows.length) {
-      $("#watchdog-events").html('<tr><td colspan="4" class="text-muted">No watchdog events found.</td></tr>');
+      $("#system-check-events").html('<tr><td colspan="4" class="text-muted">No monitor events found.</td></tr>');
       return;
     }
 
-    $("#watchdog-events").html(rows.map(function(row) {
+    $("#system-check-events").html(rows.map(function(row) {
       return '<tr>' +
         '<td>' + escapeHtml(formatTime(row.time)) + '</td>' +
         '<td>' + escapeHtml(row.service || "") + '</td>' +
@@ -91,7 +92,7 @@ $(document).ready(function() {
   }
 
   function refreshEvents() {
-    $("#watchdog-events").html('<tr><td colspan="4" class="text-muted">Loading events...</td></tr>');
+    $("#system-check-events").html('<tr><td colspan="4" class="text-muted">Loading events...</td></tr>');
     window.fetch("/api/v1/get/logs/watchdog/100", {
       method: "GET",
       cache: "no-cache"
@@ -101,19 +102,19 @@ $(document).ready(function() {
       renderEvents(Array.isArray(data) ? data : []);
     }).catch(function(error) {
       console.log(error);
-      $("#watchdog-events").html('<tr><td colspan="4" class="text-warning">Could not load watchdog events.</td></tr>');
+      $("#system-check-events").html('<tr><td colspan="4" class="text-warning">Could not load monitor events.</td></tr>');
     });
   }
 
   function checkName(check) {
-    return $('.watchdog-check[value="' + check + '"]').closest("label").find(".fw-bold").first().text();
+    return $('.system-check[value="' + check + '"]').closest("label").find(".fw-bold").first().text();
   }
 
   function runCheck(check) {
-    var resultId = "watchdog-result-" + check;
+    var resultId = "system-check-result-" + check;
     renderRunning(resultId, checkName(check));
 
-    return window.fetch("/inc/ajax/watchdog_check.php?check=" + encodeURIComponent(check), {
+    return window.fetch("/inc/ajax/system_check.php?check=" + encodeURIComponent(check), {
       method: "GET",
       cache: "no-cache"
     }).then(function(response) {
@@ -131,7 +132,7 @@ $(document).ready(function() {
     });
   }
 
-  $("#watchdog-run-selected").on("click", function(e) {
+  $("#system-check-run-selected").on("click", function(e) {
     e.preventDefault();
     if (running) return;
 
@@ -139,8 +140,8 @@ $(document).ready(function() {
     if (!checks.length) return;
 
     running = true;
-    $("#watchdog-run-state").removeClass("bg-secondary bg-success bg-danger").addClass("bg-info text-dark").text("Running");
-    $("#watchdog-run-selected").prop("disabled", true);
+    $("#system-check-run-state").removeClass("bg-secondary bg-success bg-danger").addClass("bg-info text-dark").text("Running");
+    $("#system-check-run-selected").prop("disabled", true);
 
     checks.reduce(function(chain, check) {
       return chain.then(function() {
@@ -148,23 +149,23 @@ $(document).ready(function() {
       });
     }, Promise.resolve()).finally(function() {
       running = false;
-      $("#watchdog-run-state").removeClass("bg-info text-dark").addClass("bg-success").text("Complete");
-      $("#watchdog-run-selected").prop("disabled", false);
+      $("#system-check-run-state").removeClass("bg-info text-dark").addClass("bg-success").text("Complete");
+      $("#system-check-run-selected").prop("disabled", false);
     });
   });
 
-  $("#watchdog-select-all").on("click", function(e) {
+  $("#system-check-select-all").on("click", function(e) {
     e.preventDefault();
-    $(".watchdog-check").prop("checked", true);
+    $(".system-check").prop("checked", true);
   });
 
-  $("#watchdog-clear-results").on("click", function(e) {
+  $("#system-check-clear-results").on("click", function(e) {
     e.preventDefault();
-    $("#watchdog-results").html('<div class="text-muted" id="watchdog-empty-state">No checks have been run yet.</div>');
-    $("#watchdog-run-state").removeClass("bg-success bg-danger bg-info text-dark").addClass("bg-secondary").text("Idle");
+    $("#system-check-results").html('<div class="text-muted" id="system-check-empty-state">No checks have been run yet.</div>');
+    $("#system-check-run-state").removeClass("bg-success bg-danger bg-info text-dark").addClass("bg-secondary").text("Idle");
   });
 
-  $("#watchdog-refresh-events").on("click", function(e) {
+  $("#system-check-refresh-events").on("click", function(e) {
     e.preventDefault();
     refreshEvents();
   });
