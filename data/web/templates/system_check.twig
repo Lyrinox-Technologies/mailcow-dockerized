@@ -1,0 +1,51 @@
+{% extends 'base.twig' %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-3">
+  <div>
+    <h3 class="mb-1">System Check</h3>
+    <p class="text-muted mb-0">Run self-checks for service health, mail flow, TLS, and common configuration issues.</p>
+  </div>
+  <div class="btn-group ms-auto">
+    <button class="btn btn-sm btn-primary" id="system-check-run-selected"><i class="bi bi-play-fill"></i> Run selected</button>
+    <button class="btn btn-sm btn-secondary" id="system-check-select-all">Select all</button>
+    <button class="btn btn-sm btn-secondary" id="system-check-clear-results">Clear</button>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-lg-4 mb-4">
+    <div class="card">
+      <div class="card-header fs-5">Checks</div>
+      <div class="list-group list-group-flush" id="system-check-list">
+        {% for check in system_checks %}
+          <label class="list-group-item">
+            <div class="d-flex gap-2">
+              <input class="form-check-input system-check" type="checkbox" value="{{ check.id }}" checked>
+              <div>
+                <span class="fw-bold">{{ check.name }}</span>
+                <small class="d-block text-muted">{{ check.category }}</small>
+                <small class="d-block">{{ check.description }}</small>
+              </div>
+            </div>
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-8">
+    <div class="card">
+      <div class="card-header d-flex align-items-center fs-5">
+        <span>Live Results</span>
+        <span class="badge bg-secondary ms-auto" id="system-check-run-state">Idle</span>
+      </div>
+      <div class="card-body">
+        <div id="system-check-results" class="d-flex flex-column gap-3">
+          <div class="text-muted" id="system-check-empty-state">No checks have been run yet.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

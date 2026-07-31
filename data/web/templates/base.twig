@@ -67,6 +67,7 @@
           <a href="#" class="nav-link dropdown-toggle" data-bs-toggle="dropdown" role="button" aria-expanded="false">{{ lang.header.mailcow_system }}</a>
           <ul class="dropdown-menu">
             <li><a href="/admin/dashboard" class="dropdown-item {% if is_uri('dashboard') %}active{% endif %}">{{ lang.header.debug }}</a></li>
+            <li><a href="/admin/system_check" class="dropdown-item {% if is_uri('system_check') %}active{% endif %}">System Check</a></li>
             <li><a href="/admin/system" class="dropdown-item {% if is_uri('system') %}active{% endif %}">{{ lang.header.mailcow_config }}</a></li>
           </ul>
         </li>
